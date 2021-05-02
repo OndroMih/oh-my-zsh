@@ -1,0 +1,181 @@
+#DEBUG=true
+
+source $(dirname $(realpath $0))/payara-generated
+
+__my_asadmin_options="--port
+--user
+--passwordfile
+--terse
+--secure
+--echo
+--interactive
+--detach
+--help
+"
+
+__my_asadmin_mising_commands="
+create-domain
+delete-domain
+start-domain
+"
+
+__my_complete_start-domain () {
+  log start-domain completion
+}
+
+clearlog()
+{
+  if [[ x$DEBUG = xtrue ]]
+   then
+    rm -f /tmp/payara_autocomplete.log
+  fi
+}
+
+log()
+{
+  if [[ x$DEBUG = xtrue ]]
+   then
+    echo $@ >> /tmp/payara_autocomplete.log
+  fi
+}
+
+_my_asadmin()
+{
+    clearlog
+
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    #prev="${COMP_WORDS[COMP_CWORD-1]}"
+    
+    log Full line: "${COMP_WORDS[@]}"
+    cmds="x ${__my_asadmin_mising_commands} x"
+    log $cmds
+    log Cur: $cur
+    for word in "${COMP_WORDS[@]}"
+     do
+#      log "x ${__asadmin_commands} ${__my_asadmin_mising_commands} x"
+      if [[ "$cmds" = *" $word "* ]]
+       then
+        log The line contains the $word command
+       fi
+    done
+
+    COMPREPLY=( $(compgen -W "${__asadmin_commands} ${__my_asadmin_options} ${__my_asadmin_mising_commands}" -- ${cur}))
+    log Reply: 
+    if [[ x$DEBUG = xtrue ]]
+      then
+#        for i in "${COMPREPLY[@]}"
+#        do 
+#        #log "$i"
+#        done
+        log End of reply. 
+    fi
+#    COMPREPLY=( $(compgen -o filenames))
+
+}
+
+
+
+_my_zsh_asadmin () {
+
+  complete_domains () {
+    INCOMPLETE_WORD="$1"
+    ASADMIN_CMD="$2"
+    
+    if echo "$INCOMPLETE_WORD"x | grep -v '^-' > /dev/null
+     # doesn't start with -
+     then
+      local DOMAINS
+      log Retrieving the list of domains
+      DOMAINS=`$ASADMIN_CMD list-domains | grep -v list-domains | cut -d ' ' -f 1`
+      _describe 'domain' "($DOMAINS)"
+    fi
+  }
+
+  clearlog
+
+  log _my_zsh_asadmin
+  local state
+  local line
+  local ASADMIN_CMD="$words[1]"
+  _arguments -C {-p,--port=}'[Port for administration (also -p)]' \
+             '--help[Displays the help text]' \
+             {-H,--host=}'[Machine name of the DAS (also -H)]' \
+             {-u,--user=}'[Name of the admin user of the DAS (also -u)]' \
+             {-W,--passwordfile}'[File with passwords (also -W)]:passwordfile:_files' \
+             {-t,--terse=}'[Concise output for scripts (also -t)]: :(true false)' \
+             {-s,--secure=}'[Use SSL/TLS (also -s)]: :(true false)' \
+             {-e,--echo=}'[Echo command-line statement (also -e)]: :(true false)' \
+             {-I,--interactive=}'[Prompt required options (also -I)]: :(true false)' \
+             '--detach=[Execute in the background]: :(true false)' \
+             "*::command:->command"
+  case $state in
+   command)
+    
+    log Asadmin:$ASADMIN_CMD
+    local COMMAND="$line[1]"
+    log Command=$COMMAND
+    local INCOMPLETE_WORD="$words[CURRENT]"
+    log Word=$INCOMPLETE_WORD
+    
+    case $COMMAND in
+     start-domain)
+      log start-domain
+      log STATE:$state
+      _arguments -A "-*" -C {-d,--debug=}'[Debug mode (also -d)]: :(true false)' \
+                 '--domaindir[Directory with domain directories]:domaindir:_files -/' \
+                 {-n,--dry-run=}'[Do not start, only print the command]:dryrun: :(true false)' \
+                 '--upgrade=[Upgrade configuration from older version]:upgrade: :(true false)' \
+                 '--help[Displays the help text]' \
+                 {-v,--verbose}'[Run in foreground and print log (also -v)]: :(true false)' \
+                 {-w,--watchdog=}'[Display info about domain (also -w)]: :(true false)' \
+                 "::domain:->domains"
+      log STATE:$state
+      case $state in
+       domains)
+        complete_domains "$INCOMPLETE_WORD" "$ASADMIN_CMD"
+        ;;
+      esac
+     ;;
+     stop-domain | restart-domain)
+      log $COMMAND
+      log STATE:$state
+      _arguments "::domain:->domains"
+      log STATE:$state
+      case $state in
+       domains)
+        complete_domains "$INCOMPLETE_WORD" "$ASADMIN_CMD"
+        ;;
+      esac
+     ;;
+     deploy | redeploy )
+      log deploy
+      log STATE:$state
+      _arguments "::package:_files"
+     ;;
+     *)
+      log $COMMAND
+      if [ "$COMMAND" != "$INCOMPLETE_WORD" ]
+       # we're adding arguments to asadmin command
+       then
+        _arguments -C '--help[Displays the help text]'
+       else
+       # we don't have an asadin command yet, offer all asadmin commands
+        _describe 'command' "(${__asadmin_commands} ${__my_asadmin_mising_commands})"
+      fi
+     ;;
+    esac
+    ;;
+  esac
+}
+if [ -n "$ZSH_VERSION" -a  1 = 1 ]
+ then
+# is ZSH shell
+  log ZSH
+  compdef _my_zsh_asadmin asadmin
+ else
+# BASH shell is used by default if no other shell is detected
+  log BASH
+  complete -F _my_asadmin asadmin
+fi
