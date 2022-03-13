@@ -17,6 +17,7 @@ __my_asadmin_mising_commands="
 create-domain
 delete-domain
 start-domain
+list-domains
 "
 
 __my_complete_start-domain () {
